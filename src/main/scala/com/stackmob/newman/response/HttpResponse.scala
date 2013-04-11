@@ -20,10 +20,7 @@ package response
 import scalaz._
 import effects._
 import Scalaz._
-import request._
 import jsonscalaz._
-import HttpRequest._
-import HttpRequestWithBody._
 import java.nio.charset.Charset
 import java.util.Date
 import com.stackmob.newman.Constants._
@@ -44,9 +41,25 @@ case class CachedHttpResponse(override val code: HttpResponseCode,
 
   private lazy val rawBodyMap = new JConcurrentMapWrapper(new ConcurrentHashMap[Charset, String])
   private lazy val parsedBodyMap = new JConcurrentMapWrapper(new ConcurrentHashMap[(Charset, JSONR[_]), Result[_]])
+  private lazy val jValueMap = new JConcurrentMapWrapper(new ConcurrentHashMap[Charset, JValue])
+  private lazy val jsonMap = new JConcurrentMapWrapper(new ConcurrentHashMap[(Charset, Boolean), String])
 
   override def bodyString(implicit charset: Charset = UTF8Charset): String = {
     rawBodyMap.getOrElseUpdate(charset, new String(rawBody, charset))
+  }
+
+  override def toJValue(implicit charset: Charset = UTF8Charset): JValue = {
+    jValueMap.getOrElseUpdate(charset, toJSON[HttpResponse](this)(getResponseSerialization.writer))
+  }
+
+  override def toJson(prettyPrint: Boolean = false)(implicit charset: Charset = UTF8Charset): String = {
+    jsonMap.getOrElseUpdate((charset, prettyPrint), {
+      if(prettyPrint) {
+        pretty(render(toJValue))
+      } else {
+        compact(render(toJValue))
+      }
+    })
   }
 
   override def bodyAs[T](implicit reader: JSONR[T],
@@ -80,10 +93,12 @@ trait HttpResponse {
 
   def toJValue(implicit charset: Charset = UTF8Charset): JValue = toJSON(this)(getResponseSerialization.writer)
 
-  def toJson(prettyPrint: Boolean = false): String = if(prettyPrint) {
-    pretty(render(toJValue))
-  } else {
-    compact(render(toJValue))
+  def toJson(prettyPrint: Boolean = false)(implicit charset: Charset = UTF8Charset): String = {
+    if(prettyPrint) {
+      pretty(render(toJValue))
+    } else {
+      compact(render(toJValue))
+    }
   }
 
   def bodyAsCaseClass[T <: AnyRef](implicit m: Manifest[T], charset: Charset = UTF8Charset): Result[T] = {
