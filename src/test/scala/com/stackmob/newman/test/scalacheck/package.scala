@@ -22,7 +22,7 @@ import com.stackmob.newman._
 import com.stackmob.newman.caching._
 import com.stackmob.newman.request._
 import java.net.URL
-import com.stackmob.newman.response.{HttpResponseCode, HttpResponse}
+import com.stackmob.newman.response.{CachedHttpResponse, HttpResponseCode, HttpResponse}
 import HttpResponseCode._
 
 package object scalacheck {
@@ -143,7 +143,15 @@ package object scalacheck {
     headers <- genHeaders
     body <- genRawBody
   } yield {
-    new HttpResponse(code, headers, body)
+    HttpResponse(code, headers, body)
+  }
+
+  lazy val genCachedHttpResponse: Gen[HttpResponse] = for {
+    code <- genHttpResponseCode
+    headers <- genHeaders
+    body <- genRawBody
+  } yield {
+    CachedHttpResponse(code, headers, body)
   }
 
 }

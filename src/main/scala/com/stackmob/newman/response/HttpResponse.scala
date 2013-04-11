@@ -33,12 +33,48 @@ import org.apache.http.HttpHeaders
 import com.stackmob.newman.response.HttpResponseCode.HttpResponseCodeEqual
 import com.stackmob.newman.serialization.response.HttpResponseSerialization
 import com.stackmob.newman.serialization.common.DefaultBodySerialization
+import scala.collection.JavaConversions.JConcurrentMapWrapper
+import java.util.concurrent.ConcurrentHashMap
+import HttpResponse._
 
-case class HttpResponse(code: HttpResponseCode,
-                        headers: Headers,
-                        rawBody: RawBody,
-                        timeReceived: Date = new Date()) {
-  import HttpResponse._
+case class CachedHttpResponse(override val code: HttpResponseCode,
+                              override val headers: Headers,
+                              override val rawBody: RawBody,
+                              override val timeReceived: Date = new Date) extends HttpResponse {
+
+  private lazy val rawBodyMap = new JConcurrentMapWrapper(new ConcurrentHashMap[Charset, String])
+  private lazy val parsedBodyMap = new JConcurrentMapWrapper(new ConcurrentHashMap[(Charset, JSONR[_]), Result[_]])
+
+  override def bodyString(implicit charset: Charset = UTF8Charset): String = {
+    rawBodyMap.getOrElseUpdate(charset, new String(rawBody, charset))
+  }
+
+  override def bodyAs[T](implicit reader: JSONR[T],
+                         charset: Charset = UTF8Charset): Result[T] = {
+    parsedBodyMap.getOrElseUpdate((charset, reader), {
+      validating {
+        parse(bodyString(charset))
+      } mapFailure { t: Throwable =>
+        nel(UncategorizedError(t.getClass.getCanonicalName, t.getMessage, Nil))
+      } flatMap { jValue: JValue =>
+        fromJSON[T](jValue)
+      }
+    }).map(_.asInstanceOf[T])
+  }
+
+}
+
+case class StandardHttpResponse(override val code: HttpResponseCode,
+                                override val headers: Headers,
+                                override val rawBody: RawBody,
+                                override val timeReceived: Date = new Date) extends HttpResponse
+
+trait HttpResponse {
+
+  def code: HttpResponseCode
+  def headers: Headers
+  def rawBody: RawBody
+  def timeReceived: Date
 
   def bodyString(implicit charset: Charset = UTF8Charset): String = new String(rawBody, charset)
 
@@ -101,7 +137,13 @@ case class HttpResponse(code: HttpResponseCode,
 }
 
 object HttpResponse {
-  private def getResponseSerialization(implicit charset: Charset = UTF8Charset) = new HttpResponseSerialization(charset)
+
+  private[response] def getResponseSerialization(implicit charset: Charset = UTF8Charset) = new HttpResponseSerialization(charset)
+
+  def apply(code: HttpResponseCode, headers: Headers, rawBody: RawBody, timeReceived: Date = new Date): HttpResponse = {
+    StandardHttpResponse(code, headers, rawBody, timeReceived)
+  }
+
   def fromJValue(jValue: JValue)(implicit charset: Charset = UTF8Charset): Result[HttpResponse] = {
     fromJSON(jValue)(getResponseSerialization.reader)
   }
@@ -124,4 +166,15 @@ object HttpResponse {
       )
     }.list.mkString("\n")
   })
+
+  class HttpResponseW(response: HttpResponse) {
+    def toCachedResponse: CachedHttpResponse = {
+      CachedHttpResponse(response.code, response.headers, response.rawBody, response.timeReceived)
+    }
+  }
+
+  implicit def httpResponseToCachedHttpResponse(response: HttpResponse): CachedHttpResponse = {
+    new HttpResponseW(response).toCachedResponse
+  }
+
 }

@@ -21,7 +21,7 @@ import scalaz.effects.IO
 import scalaz.concurrent.Promise
 import caching._
 import request._
-import response.HttpResponse
+import com.stackmob.newman.response.{CachedHttpResponse, HttpResponse}
 import java.net.URL
 
 class ReadCachingHttpClient(httpClient: HttpClient,
@@ -71,6 +71,7 @@ class ReadCachingHttpClient(httpClient: HttpClient,
 }
 
 object ReadCachingHttpClient {
+  import HttpResponse._
   trait CachingMixin { this: HttpRequest =>
     protected def ttl: Milliseconds
     protected def cache: HttpResponseCacher
@@ -81,7 +82,8 @@ object ReadCachingHttpClient {
         resp.pure[Promise].pure[IO]
       } none {
         doHttpRequest(headers).flatMap { response: HttpResponse =>
-          cache.set(this, response, ttl) >| response.pure[Promise]
+          val cachedResponse: CachedHttpResponse = response
+          cache.set(this, cachedResponse, ttl) >| (cachedResponse: HttpResponse).pure[Promise]
         }
       }
     }
