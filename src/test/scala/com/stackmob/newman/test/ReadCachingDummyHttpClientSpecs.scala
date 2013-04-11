@@ -43,7 +43,7 @@ class ReadCachingDummyHttpClientSpecs
 
   private val genNoHttpResponse: Gen[Option[HttpResponse]] = Gen.value(Option.empty[HttpResponse])
   private val genAlwaysHttpResponse: Gen[Option[HttpResponse]] = for {
-    resp <- genCachedHttpResponse
+    resp <- genHttpResponse
   } yield {
     Some(resp)
   }
@@ -56,7 +56,7 @@ class ReadCachingDummyHttpClientSpecs
   }
 
   private def genDummyHttpClient: Gen[DummyHttpClient] = for {
-    resp <- genCachedHttpResponse
+    resp <- genHttpResponse
   } yield {
     new DummyHttpClient(() => resp)
   }

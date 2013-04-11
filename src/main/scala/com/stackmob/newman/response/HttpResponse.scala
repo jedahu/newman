@@ -75,6 +75,13 @@ case class CachedHttpResponse(override val code: HttpResponseCode,
     }).map(_.asInstanceOf[T])
   }
 
+  override def equals(other: Any): Boolean = {
+    ~other.cast[HttpResponse].map { resp =>
+      StandardHttpResponse(code, headers, rawBody, timeReceived) ==
+        StandardHttpResponse(resp.code, resp.headers, resp.rawBody, resp.timeReceived)
+    }
+  }
+
 }
 
 case class StandardHttpResponse(override val code: HttpResponseCode,

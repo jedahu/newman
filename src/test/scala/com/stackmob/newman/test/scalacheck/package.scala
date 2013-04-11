@@ -146,12 +146,4 @@ package object scalacheck {
     HttpResponse(code, headers, body)
   }
 
-  lazy val genCachedHttpResponse: Gen[HttpResponse] = for {
-    code <- genHttpResponseCode
-    headers <- genHeaders
-    body <- genRawBody
-  } yield {
-    CachedHttpResponse(code, headers, body)
-  }
-
 }
